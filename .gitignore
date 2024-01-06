@@ -1,0 +1,11 @@
+.idea
+.eclipse
+.classpath
+.project
+target
+.settings/**
+*.iml
+log.txt
+*.gz
+logs
+src/test
