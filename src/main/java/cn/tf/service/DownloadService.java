@@ -50,6 +50,8 @@ public class DownloadService {
             Elements articles  = doc.select("a h2");
             int i = 0;
             for (Element article  : articles ) {
+                i++;
+                String articleName = i + "-" + article.text();
                 String href = article.parent().attr("href");
                 if (href.isEmpty()) {
                     href = article.parent().parent().attr("href");
@@ -60,8 +62,8 @@ public class DownloadService {
                 } else {
                     articleURL = href;
                 }
-                log.info(++i + "article link: " + articleURL);
-                File pdfFile = this.getArticlePDF(articleURL, i, id);
+                log.info(i + " " +  articleName + " article link: " + articleURL);
+                File pdfFile = this.getArticlePDF(articleURL, articleName, id);
                 pdfList.add(pdfFile);
                 if (i >= 10) {
                     break;
@@ -74,8 +76,8 @@ public class DownloadService {
 
     }
 
-    private File getArticlePDF(String articleURL, int index, String id) {
-        String filePath = "/home/xin/files/" + id + "/articlepdf" + index + ".pdf";
+    private File getArticlePDF(String articleURL, String articleName, String id) {
+        String filePath = "/home/xin/files/" + id + "/" + articleName + ".pdf";
         try {
             Document doc = this.catchPageInfo(articleURL);
             Elements paragraphs = doc.select(".pw-post-body-paragraph");
@@ -84,10 +86,15 @@ public class DownloadService {
                 PDPage page = new PDPage();
                 document.addPage(page);
 
-                float margin = 50; // 左边距
+                float margin = 50; // 边距
                 float width = page.getMediaBox().getWidth() - 2 * margin;
                 float startX = margin;
                 float startY = page.getMediaBox().getHeight() - margin;
+                float lineHeight = 10; // 行间距
+                float paragraphSpacing = 15; // 段落间距
+
+                float topMargin = margin; // 上边距
+                float bottomMargin = margin; // 下边距
 
                 int linesWritten = 0;
                 PDPageContentStream contentStream = new PDPageContentStream(document, page);
@@ -103,8 +110,22 @@ public class DownloadService {
                         float wordWidth = PDType1Font.TIMES_ROMAN.getStringWidth(line.toString() + " " + word) / 1000 * 8;
 
                         if (wordWidth > width) {
+                            if (startY - (linesWritten * lineHeight) <= bottomMargin) {
+                                contentStream.close();
+
+                                page = new PDPage();
+                                document.addPage(page);
+
+                                contentStream = new PDPageContentStream(document, page);
+                                contentStream.setFont(PDType1Font.TIMES_ROMAN, 8);
+                                contentStream.moveTo(margin, page.getMediaBox().getHeight() - topMargin);
+
+                                startY = page.getMediaBox().getHeight() - topMargin;
+                                linesWritten = 0;
+                            }
+
                             contentStream.beginText();
-                            contentStream.newLineAtOffset(startX, startY - (linesWritten * 10)); // 调整行间距
+                            contentStream.newLineAtOffset(startX, startY - (linesWritten * lineHeight));
                             contentStream.showText(line.toString());
                             contentStream.endText();
                             linesWritten++;
@@ -119,29 +140,29 @@ public class DownloadService {
                     }
 
                     contentStream.beginText();
-                    contentStream.newLineAtOffset(startX, startY - (linesWritten * 10)); // 调整行间距
+                    contentStream.newLineAtOffset(startX, startY - (linesWritten * lineHeight));
                     contentStream.showText(line.toString());
                     contentStream.endText();
                     linesWritten++;
 
-                    startY -= 15; // 移动Y位置至下一个段落
+                    startY -= paragraphSpacing + lineHeight;
 
-                    if (startY <= margin) {
+                    if (startY <= bottomMargin) {
                         contentStream.close();
 
                         page = new PDPage();
                         document.addPage(page);
 
-                        contentStream = new PDPageContentStream(document, page); // 初始化新的PDPageContentStream
+                        contentStream = new PDPageContentStream(document, page);
                         contentStream.setFont(PDType1Font.TIMES_ROMAN, 8);
-                        contentStream.moveTo(50, page.getMediaBox().getHeight() - margin);
+                        contentStream.moveTo(margin, page.getMediaBox().getHeight() - topMargin);
 
-                        startY = page.getMediaBox().getHeight() - margin;
+                        startY = page.getMediaBox().getHeight() - topMargin;
                         linesWritten = 0;
                     }
                 }
 
-                contentStream.close(); // 关闭最后一个PDPageContentStream
+                contentStream.close();
 
                 document.save(filePath);
             } catch (IOException e) {
