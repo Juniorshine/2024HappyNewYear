@@ -1,8 +1,12 @@
 package cn.tf.service;
 
+import com.google.cloud.translate.Translate;
+import com.google.cloud.translate.TranslateOptions;
+import com.google.cloud.translate.Translation;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -77,12 +81,18 @@ public class DownloadService {
     }
 
     private File getArticlePDF(String articleURL, String articleName, String id) {
+        // 设置代理
+        System.setProperty("socksProxyHost", "127.0.0.1");
+        System.setProperty("socksProxyPort", "10808");
+        Translate translate = TranslateOptions.newBuilder().setApiKey("AIzaSyDkWQR4cMd0KdVw9RC-NiemPTbHqoebpeg").build().getService();
+
         String filePath = "/home/xin/files/" + id + "/" + articleName + ".pdf";
         try {
             Document doc = this.catchPageInfo(articleURL);
             Elements paragraphs = doc.select(".pw-post-body-paragraph");
 
             try (PDDocument document = new PDDocument()) {
+                PDType0Font font = PDType0Font.load(document, new File("msyh.ttf"));
                 PDPage page = new PDPage();
                 document.addPage(page);
 
@@ -98,16 +108,18 @@ public class DownloadService {
 
                 int linesWritten = 0;
                 PDPageContentStream contentStream = new PDPageContentStream(document, page);
-                contentStream.setFont(PDType1Font.TIMES_ROMAN, 8);
+                contentStream.setFont(font, 8);
 
                 for (Element paragraph : paragraphs) {
                     String text = paragraph.text();
+//                    Translation translation = translate.translate(text, Translate.TranslateOption.targetLanguage("zh"));
+//                    text = text + "\n" + translation.getTranslatedText();
 
                     String[] words = text.split(" ");
                     StringBuilder line = new StringBuilder();
 
                     for (String word : words) {
-                        float wordWidth = PDType1Font.TIMES_ROMAN.getStringWidth(line.toString() + " " + word) / 1000 * 8;
+                        float wordWidth = font.getStringWidth(line.toString() + " " + word) / 1000 * 8;
 
                         if (wordWidth > width) {
                             if (startY - (linesWritten * lineHeight) <= bottomMargin) {
@@ -117,7 +129,7 @@ public class DownloadService {
                                 document.addPage(page);
 
                                 contentStream = new PDPageContentStream(document, page);
-                                contentStream.setFont(PDType1Font.TIMES_ROMAN, 8);
+                                contentStream.setFont(font, 8);
                                 contentStream.moveTo(margin, page.getMediaBox().getHeight() - topMargin);
 
                                 startY = page.getMediaBox().getHeight() - topMargin;
@@ -154,7 +166,7 @@ public class DownloadService {
                         document.addPage(page);
 
                         contentStream = new PDPageContentStream(document, page);
-                        contentStream.setFont(PDType1Font.TIMES_ROMAN, 8);
+                        contentStream.setFont(font, 8);
                         contentStream.moveTo(margin, page.getMediaBox().getHeight() - topMargin);
 
                         startY = page.getMediaBox().getHeight() - topMargin;
