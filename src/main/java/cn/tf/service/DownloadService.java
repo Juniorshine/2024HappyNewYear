@@ -12,10 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.util.ArrayList;
@@ -28,10 +25,10 @@ import java.util.zip.ZipOutputStream;
 public class DownloadService {
     private static final Logger log = LoggerFactory.getLogger(DownloadService.class);
 
-    public void downloadPDFFileFromURL(String url){
+    public void downloadPDFFileFromURL(String url, OutputStream outputStream){
         List<File> pdfList = new ArrayList();
         String id = UUID.randomUUID().toString();
-        String zipFileName = "/home/xin/files/" + id + "/" + id + ".pdf";
+        String zipFileName = "/home/xin/files/" + id + "/" + id + ".zip";
         File file = new File(zipFileName);
         // 获取文件的父目录
         File parentDir = file.getParentFile();
@@ -66,11 +63,14 @@ public class DownloadService {
                 log.info(++i + "article link: " + articleURL);
                 File pdfFile = this.getArticlePDF(articleURL, i, id);
                 pdfList.add(pdfFile);
+                if (i >= 10) {
+                    break;
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-        this.createZipFile(pdfList, zipFileName);
+        this.createZipFile(pdfList, outputStream);
 
     }
 
@@ -84,63 +84,65 @@ public class DownloadService {
                 PDPage page = new PDPage();
                 document.addPage(page);
 
-                float margin = 50; // Left margin
+                float margin = 50; // 左边距
                 float width = page.getMediaBox().getWidth() - 2 * margin;
                 float startX = margin;
                 float startY = page.getMediaBox().getHeight() - margin;
 
                 int linesWritten = 0;
+                PDPageContentStream contentStream = new PDPageContentStream(document, page);
+                contentStream.setFont(PDType1Font.TIMES_ROMAN, 8);
 
-                try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
-                    contentStream.setFont(PDType1Font.TIMES_ROMAN, 8);
+                for (Element paragraph : paragraphs) {
+                    String text = paragraph.text();
 
-                    for (Element paragraph : paragraphs) {
-                        String text = paragraph.text();
+                    String[] words = text.split(" ");
+                    StringBuilder line = new StringBuilder();
 
-                        String[] words = text.split(" ");
-                        StringBuilder line = new StringBuilder();
+                    for (String word : words) {
+                        float wordWidth = PDType1Font.TIMES_ROMAN.getStringWidth(line.toString() + " " + word) / 1000 * 8;
 
-                        for (String word : words) {
-                            float wordWidth = PDType1Font.TIMES_ROMAN.getStringWidth(line.toString() + " " + word) / 1000 * 8;
+                        if (wordWidth > width) {
+                            contentStream.beginText();
+                            contentStream.newLineAtOffset(startX, startY - (linesWritten * 10)); // 调整行间距
+                            contentStream.showText(line.toString());
+                            contentStream.endText();
+                            linesWritten++;
 
-                            if (wordWidth > width) {
-                                contentStream.beginText();
-                                contentStream.newLineAtOffset(startX, startY - (linesWritten * 10)); // Adjust line spacing
-                                contentStream.showText(line.toString());
-                                contentStream.endText();
-                                linesWritten++;
-
-                                line = new StringBuilder(word);
-                            } else {
-                                if (line.length() > 0) {
-                                    line.append(" ");
-                                }
-                                line.append(word);
+                            line = new StringBuilder(word);
+                        } else {
+                            if (line.length() > 0) {
+                                line.append(" ");
                             }
-                        }
-
-                        contentStream.beginText();
-                        contentStream.newLineAtOffset(startX, startY - (linesWritten * 10)); // Adjust line spacing
-                        contentStream.showText(line.toString());
-                        contentStream.endText();
-                        linesWritten++;
-
-                        startY -= 15; // Move Y position for the next paragraph
-
-                        if (startY <= margin) {
-                            contentStream.close();
-
-                            page = new PDPage();
-                            document.addPage(page);
-                            contentStream.moveTo(50, page.getMediaBox().getHeight() - margin);
-
-                            startY = page.getMediaBox().getHeight() - margin;
-                            linesWritten = 0;
-
-                            contentStream.setFont(PDType1Font.TIMES_ROMAN, 8);
+                            line.append(word);
                         }
                     }
+
+                    contentStream.beginText();
+                    contentStream.newLineAtOffset(startX, startY - (linesWritten * 10)); // 调整行间距
+                    contentStream.showText(line.toString());
+                    contentStream.endText();
+                    linesWritten++;
+
+                    startY -= 15; // 移动Y位置至下一个段落
+
+                    if (startY <= margin) {
+                        contentStream.close();
+
+                        page = new PDPage();
+                        document.addPage(page);
+
+                        contentStream = new PDPageContentStream(document, page); // 初始化新的PDPageContentStream
+                        contentStream.setFont(PDType1Font.TIMES_ROMAN, 8);
+                        contentStream.moveTo(50, page.getMediaBox().getHeight() - margin);
+
+                        startY = page.getMediaBox().getHeight() - margin;
+                        linesWritten = 0;
+                    }
                 }
+
+                contentStream.close(); // 关闭最后一个PDPageContentStream
+
                 document.save(filePath);
             } catch (IOException e) {
                 e.printStackTrace();
@@ -161,12 +163,11 @@ public class DownloadService {
         return doc;
     }
 
-    public void createZipFile(List<File> pdfFiles, String zipFileName) {
+    public void createZipFile(List<File> pdfFiles, OutputStream outputStream) {
         byte[] buffer = new byte[1024];
 
         try {
-            FileOutputStream fos = new FileOutputStream(zipFileName);
-            ZipOutputStream zos = new ZipOutputStream(fos);
+            ZipOutputStream zos = new ZipOutputStream(outputStream);
 
             for (File pdfFile : pdfFiles) {
                 FileInputStream fis = new FileInputStream(pdfFile);
