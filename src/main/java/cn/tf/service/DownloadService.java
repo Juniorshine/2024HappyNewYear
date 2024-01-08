@@ -86,7 +86,10 @@ public class DownloadService {
         System.setProperty("socksProxyPort", "10808");
         Translate translate = TranslateOptions.newBuilder().setApiKey("AIzaSyDkWQR4cMd0KdVw9RC-NiemPTbHqoebpeg").build().getService();
 
+        // 使用正则表达式替换不支持字符为下划线
+        articleName = articleName.replaceAll("[\\\\/:*?\"<>|]", "_");
         String filePath = "/home/xin/files/" + id + "/" + articleName + ".pdf";
+
         try {
             Document doc = this.catchPageInfo(articleURL);
             Elements paragraphs = doc.select(".pw-post-body-paragraph");
