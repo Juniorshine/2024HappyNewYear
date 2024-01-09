@@ -7,7 +7,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -20,6 +20,7 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
@@ -115,14 +116,23 @@ public class DownloadService {
 
                 for (Element paragraph : paragraphs) {
                     String text = paragraph.text();
-//                    Translation translation = translate.translate(text, Translate.TranslateOption.targetLanguage("zh"));
-//                    text = text + "\n" + translation.getTranslatedText();
-
-                    String[] words = text.split(" ");
+                    Translation translation = translate.translate(text, Translate.TranslateOption.targetLanguage("zh"));
+                    log.info(text);
+                    String translatedText = translation.getTranslatedText();
+                    log.info(translatedText);
+                    String[] wordsEn = text.split(" ");
+                    String[] wordZh = translatedText.split("(?!^)");
+                    String[] words = Arrays.copyOf(wordsEn, wordsEn.length + wordZh.length);
+                    System.arraycopy(wordZh, 0, words, wordsEn.length, wordZh.length);
                     StringBuilder line = new StringBuilder();
 
                     for (String word : words) {
-                        float wordWidth = font.getStringWidth(line.toString() + " " + word) / 1000 * 8;
+                        float wordWidth = 0;
+                        try {
+                            wordWidth = font.getStringWidth(line.toString() + " " + word) / 1000 * 8;
+                        } catch (IllegalArgumentException e) {
+
+                        }
 
                         if (wordWidth > width) {
                             if (startY - (linesWritten * lineHeight) <= bottomMargin) {
@@ -156,7 +166,12 @@ public class DownloadService {
 
                     contentStream.beginText();
                     contentStream.newLineAtOffset(startX, startY - (linesWritten * lineHeight));
-                    contentStream.showText(line.toString());
+
+                    try {
+                        contentStream.showText(line.toString());
+                    } catch (IllegalArgumentException e) {
+
+                    }
                     contentStream.endText();
                     linesWritten++;
 
